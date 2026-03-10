@@ -1,0 +1,9 @@
+target/
+nbproject/
+nb-configuration.xml
+nbactions.xml
+nb-build.xml
+backups/
+*.class
+*.jar
+*.exe
