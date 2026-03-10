@@ -33,15 +33,15 @@ public class PainelFerramentas extends JPanel {
         
 
         JPanel pnlBackup = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
-        pnlBackup.setBorder(BorderFactory.createTitledBorder("️ Segurança & Backup"));
+        pnlBackup.setBorder(BorderFactory.createTitledBorder("Segurança e Backup"));
         pnlBackup.setBackground(new Color(245, 245, 255));
         
-        JButton btnFazerBackup = new JButton(" Criar Backup Agora");
+        JButton btnFazerBackup = new JButton("Criar Backup Agora");
         btnFazerBackup.setBackground(new Color(100, 100, 200));
         btnFazerBackup.setForeground(Color.WHITE);
         btnFazerBackup.setFont(new Font("Segoe UI", Font.BOLD, 12));
         
-        JButton btnRestaurar = new JButton(" Ler/Restaurar Backup");
+        JButton btnRestaurar = new JButton("Ler/Restaurar Backup");
         btnRestaurar.setBackground(new Color(255, 150, 100));
         btnRestaurar.setFont(new Font("Segoe UI", Font.BOLD, 12));
 
@@ -76,9 +76,9 @@ public class PainelFerramentas extends JPanel {
 
 
         JPanel pnlProximos = new JPanel(new BorderLayout());
-        pnlProximos.setBorder(BorderFactory.createTitledBorder("🔔 Próximas Atividades"));
+        pnlProximos.setBorder(BorderFactory.createTitledBorder("Próximas Atividades"));
         JPanel pnlFerramentasLista = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton btnAtualizar = new JButton("🔄 Atualizar Lista");
+        JButton btnAtualizar = new JButton("Atualizar Lista");
         btnAtualizar.addActionListener(e -> { montarCalendario(); atualizarListaProximos(); });
         pnlFerramentasLista.add(btnAtualizar);
         pnlProximos.add(pnlFerramentasLista, BorderLayout.NORTH);

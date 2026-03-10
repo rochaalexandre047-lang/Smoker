@@ -70,7 +70,7 @@ public class TelaCriadorTemplate extends JPanel {
 
     private JPanel montarPainelCriacao() {
         JPanel painel = new JPanel(new BorderLayout());
-        painel.setBorder(BorderFactory.createTitledBorder("🛠️ Criar Novo Modelo"));
+        painel.setBorder(BorderFactory.createTitledBorder("Criar Novo Modelo"));
 
         JPanel pnlTopo = new JPanel(new GridLayout(0, 1));
         txtNomeModulo = new JTextField();
@@ -143,7 +143,7 @@ public class TelaCriadorTemplate extends JPanel {
         
         painel.add(pnlCentro, BorderLayout.CENTER);
 
-        JButton btnSalvar = new JButton("💾 SALVAR NOVO MODELO");
+        JButton btnSalvar = new JButton("SALVAR NOVO MODELO");
         btnSalvar.setFont(new Font("Segoe UI", Font.BOLD, 14));
         btnSalvar.setBackground(new Color(200, 255, 200));
         btnSalvar.setContentAreaFilled(false);
@@ -196,7 +196,7 @@ public class TelaCriadorTemplate extends JPanel {
 
     private JPanel montarPainelListagem() {
         JPanel painel = new JPanel(new BorderLayout());
-        painel.setBorder(BorderFactory.createTitledBorder("📂 Modelos Existentes"));
+        painel.setBorder(BorderFactory.createTitledBorder("Modelos Existentes"));
         String[] colunas = {"ID", "Nome do Módulo", "Resumo"};
         modeloTabelaTemplates = new DefaultTableModel(colunas, 0) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
@@ -213,9 +213,9 @@ public class TelaCriadorTemplate extends JPanel {
 
         painel.add(new JScrollPane(tabelaTemplates), BorderLayout.CENTER);
         JPanel pnlBotoes = new JPanel(new GridLayout(1, 2, 5, 5));
-        JButton btnUsar = new JButton("✅ Disponibilizar");
+        JButton btnUsar = new JButton("Disponibilizar");
         btnUsar.addActionListener(e -> usarModeloSelecionado());
-        JButton btnExcluir = new JButton("🗑️ Excluir");
+        JButton btnExcluir = new JButton("Excluir");
         btnExcluir.setBackground(new Color(255, 200, 200));
         btnExcluir.setContentAreaFilled(false); 
         btnExcluir.setOpaque(true);

@@ -69,7 +69,7 @@ public class Main extends JFrame {
                 if (confirmacao == JOptionPane.YES_OPTION) {
                     try {
                         ConexaoDB.zerarBancoCompleto();
-                        JOptionPane.showMessageDialog(this, "♻️ O Banco de Dados foi completamente resetado.\nO sistema será fechado para aplicar as alterações.");
+                        JOptionPane.showMessageDialog(this, "O Banco de Dados foi completamente resetado.\nO sistema será fechado para aplicar as alterações.");
                         System.exit(0); // Fecha o programa para evitar erros de cache
                     } catch (Exception ex) {
                         JOptionPane.showMessageDialog(this, "Erro fatal ao tentar zerar: " + ex.getMessage());

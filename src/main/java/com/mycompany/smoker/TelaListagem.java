@@ -30,7 +30,7 @@ public class TelaListagem extends JPanel {
         JPanel painelTopo = new JPanel(new FlowLayout(FlowLayout.LEFT));
         painelTopo.setBorder(new EmptyBorder(10, 10, 10, 10));
         
-        JLabel lblPesquisa = new JLabel("🔍 Pesquisar:");
+        JLabel lblPesquisa = new JLabel("Pesquisar:");
         lblPesquisa.setFont(new Font("Segoe UI", Font.BOLD, 14));
         
         txtPesquisa = new JTextField(30);
@@ -80,7 +80,7 @@ public class TelaListagem extends JPanel {
         });
 
         JPopupMenu popupMenu = new JPopupMenu();
-        JMenuItem itemExcluir = new JMenuItem(" Excluir este registro");
+        JMenuItem itemExcluir = new JMenuItem("Excluir este registro");
         itemExcluir.addActionListener(e -> excluirRegistroSelecionado());
         popupMenu.add(itemExcluir);
         tabela.setComponentPopupMenu(popupMenu);
@@ -100,17 +100,17 @@ public class TelaListagem extends JPanel {
         JPanel painelBotoes = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         painelBotoes.setBorder(new EmptyBorder(10, 10, 10, 10));
         
-        JButton btnExcluir = criarBotao("️ Excluir", new Color(255, 200, 200));
+        JButton btnExcluir = criarBotao("Excluir", new Color(255, 200, 200));
         btnExcluir.addActionListener(e -> excluirRegistroSelecionado());
 
-        JButton btnAtualizar = criarBotao(" Atualizar", new Color(240, 240, 240));
+        JButton btnAtualizar = criarBotao("Atualizar", new Color(240, 240, 240));
         btnAtualizar.addActionListener(e -> carregarDados(""));
         
-        JButton btnAbrir = criarBotao("️ Ver Arquivos", new Color(200, 230, 255));
+        JButton btnAbrir = criarBotao("Ver Arquivos", new Color(200, 230, 255));
         btnAbrir.addActionListener(e -> abrirArquivoSelecionado());
         
        
-        JButton btnImprimir = criarBotao("️ Imprimir / Gerar PDF", new Color(150, 150, 255));
+        JButton btnImprimir = criarBotao("Imprimir / Gerar PDF", new Color(150, 150, 255));
         btnImprimir.setForeground(Color.WHITE);
         btnImprimir.addActionListener(e -> gerarImpressaoHtml());
        
