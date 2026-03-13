@@ -1,4 +1,5 @@
 package com.mycompany.smoker;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -47,10 +48,23 @@ public class ConexaoDB {
                 + " descricao TEXT"
                 + ");";
 
+        // --- A TABELA DE USUÁRIOS AQUI ---
+        String sqlUsuarios = "CREATE TABLE IF NOT EXISTS usuarios ("
+                + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + " login VARCHAR(50) UNIQUE,"
+                + " senha VARCHAR(50),"
+                + " perfil VARCHAR(20)" // ADMIN ou OPERADOR
+                + ");";
+
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sqlTemplates);
             stmt.execute(sqlRegistros);
-            stmt.execute(sqlEventos); 
+            stmt.execute(sqlEventos);
+            stmt.execute(sqlUsuarios); 
+            
+            // Injeta o usuário admin/admin se ele não existir
+            stmt.execute("INSERT OR IGNORE INTO usuarios (login, senha, perfil) VALUES ('admin', 'admin', 'ADMIN');");
+            
         } catch (SQLException e) {
             System.out.println("Erro ao criar tabelas: " + e.getMessage());
         }
@@ -62,21 +76,18 @@ public class ConexaoDB {
         } catch (SQLException e) { }
     }
     
-
     public static void zerarBancoCompleto() throws SQLException {
         try (Connection conn = conectar();
              Statement stmt = conn.createStatement()) {
             
-
             stmt.executeUpdate("DELETE FROM registros");
             stmt.executeUpdate("DELETE FROM templates");
             stmt.executeUpdate("DELETE FROM eventos");
-
+            // Nota: NÃO apagamos os usuários no reset para não trancar o dono pra fora!
+            
             stmt.executeUpdate("DELETE FROM sqlite_sequence WHERE name='registros'");
             stmt.executeUpdate("DELETE FROM sqlite_sequence WHERE name='templates'");
             stmt.executeUpdate("DELETE FROM sqlite_sequence WHERE name='eventos'");
-            
- 
             stmt.executeUpdate("VACUUM");
         }
     }
