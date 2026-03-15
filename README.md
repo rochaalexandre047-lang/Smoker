@@ -13,5 +13,5 @@ This project was built to help small companies manage their inventory/sales/cust
 
 ##  How to run
 1. Clone the repository.
-2. Open the project in **NetBeans**.
+2. Open the project in **NetBeans** or **VsCode**.
 3. Run the `Main` class.
