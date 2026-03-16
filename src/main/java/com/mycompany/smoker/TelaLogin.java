@@ -8,9 +8,24 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
+class UsuarioComboItem {
+    String login;
+    String perfil;
+
+    public UsuarioComboItem(String login, String perfil) {
+        this.login = login;
+        this.perfil = perfil;
+    }
+
+    @Override
+    public String toString() {
+        return login; 
+    }
+}
+
 public class TelaLogin extends JFrame {
 
-    private JTextField txtUsuario;
+    private JComboBox<Object> cmbUsuario;
     private JPasswordField txtSenha;
     private Point pontoInicialClick;
 
@@ -39,48 +54,78 @@ public class TelaLogin extends JFrame {
         pnlTitulos.add(lblSub);
         pnlEsquerda.add(pnlTitulos);
 
-        // --- LADO DIREITO ---
+        // --- LADO DIREITO BASE (Controla o Topo e o Formulário) ---
+        JPanel pnlDireitaBase = new JPanel(new BorderLayout());
+        pnlDireitaBase.setBackground(Color.WHITE);
+
+        // --- BARRA DE CONTROLE DA JANELA (Minimizar, Maximizar, Fechar) ---
+        JPanel pnlBarraJanela = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        pnlBarraJanela.setBackground(Color.WHITE);
+        
+        JButton btnMinimizar = criarBotaoJanela("—", false);
+        JButton btnMaximizar = criarBotaoJanela("□", false);
+        JButton btnFechar = criarBotaoJanela("X", true);
+
+        // Ações dos botões da janela
+        btnMinimizar.addActionListener(e -> setExtendedState(JFrame.ICONIFIED)); // Esconde na barra de tarefas
+        
+        btnMaximizar.addActionListener(e -> {
+            // Alterna entre tela cheia e tamanho normal
+            if (getExtendedState() == JFrame.MAXIMIZED_BOTH) {
+                setExtendedState(JFrame.NORMAL);
+            } else {
+                setExtendedState(JFrame.MAXIMIZED_BOTH);
+            }
+        });
+        
+        btnFechar.addActionListener(e -> System.exit(0)); // Fecha tudo
+
+        pnlBarraJanela.add(btnMinimizar);
+        pnlBarraJanela.add(btnMaximizar);
+        pnlBarraJanela.add(btnFechar);
+        
+        pnlDireitaBase.add(pnlBarraJanela, BorderLayout.NORTH);
+
+        // --- ÁREA DO FORMULÁRIO ---
         JPanel pnlDireita = new JPanel();
         pnlDireita.setBackground(Color.WHITE);
         pnlDireita.setLayout(new BoxLayout(pnlDireita, BoxLayout.Y_AXIS));
-        pnlDireita.setBorder(new EmptyBorder(40, 50, 40, 50));
+        pnlDireita.setBorder(new EmptyBorder(10, 50, 40, 50)); 
 
-        JPanel pnlFechar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        pnlFechar.setBackground(Color.WHITE);
-        pnlFechar.setMaximumSize(new Dimension(400, 30));
-        pnlFechar.setAlignmentX(Component.LEFT_ALIGNMENT); // Mantém alinhado na estrutura
-        
-        JLabel lblFechar = new JLabel("X");
-        lblFechar.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        lblFechar.setForeground(Color.GRAY);
-        lblFechar.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        lblFechar.addMouseListener(new MouseAdapter() {
-            public void mouseClicked(MouseEvent e) { System.exit(0); }
-            public void mouseEntered(MouseEvent e) { lblFechar.setForeground(Color.RED); }
-            public void mouseExited(MouseEvent e) { lblFechar.setForeground(Color.GRAY); }
-        });
-        pnlFechar.add(lblFechar);
-        pnlDireita.add(pnlFechar);
-
-        // Título perfeitamente alinhado à esquerda
         JLabel lblLoginTitulo = new JLabel("Acesse sua conta");
         lblLoginTitulo.setFont(new Font("Segoe UI", Font.BOLD, 24));
         lblLoginTitulo.setAlignmentX(Component.LEFT_ALIGNMENT);
         pnlDireita.add(lblLoginTitulo);
         pnlDireita.add(Box.createRigidArea(new Dimension(0, 40)));
 
-        txtUsuario = new JTextField();
-        txtUsuario.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
-        txtUsuario.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        txtUsuario.setAlignmentX(Component.LEFT_ALIGNMENT); // Correção de Alinhamento
+        cmbUsuario = new JComboBox<>();
+        cmbUsuario.setEditable(true);
+        cmbUsuario.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
+        cmbUsuario.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        cmbUsuario.setAlignmentX(Component.LEFT_ALIGNMENT);
+        cmbUsuario.setBackground(Color.WHITE);
+        
+        cmbUsuario.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof UsuarioComboItem) {
+                    UsuarioComboItem item = (UsuarioComboItem) value;
+                    setText(item.login + " (" + item.perfil + ")"); 
+                }
+                return this;
+            }
+        });
+        
+        carregarUsuariosNoCombo();
         
         txtSenha = new JPasswordField();
         txtSenha.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
         txtSenha.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        txtSenha.setAlignmentX(Component.LEFT_ALIGNMENT); // Correção de Alinhamento
+        txtSenha.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         pnlDireita.add(criarLabel("Usuário"));
-        pnlDireita.add(txtUsuario);
+        pnlDireita.add(cmbUsuario);
         pnlDireita.add(Box.createRigidArea(new Dimension(0, 15)));
         pnlDireita.add(criarLabel("Senha"));
         pnlDireita.add(txtSenha);
@@ -88,7 +133,7 @@ public class TelaLogin extends JFrame {
         JCheckBox chkMostrar = new JCheckBox("Mostrar Senha");
         chkMostrar.setBackground(Color.WHITE);
         chkMostrar.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        chkMostrar.setAlignmentX(Component.LEFT_ALIGNMENT); // Correção de Alinhamento
+        chkMostrar.setAlignmentX(Component.LEFT_ALIGNMENT); 
         chkMostrar.addActionListener(e -> {
             txtSenha.setEchoChar(chkMostrar.isSelected() ? '\u0000' : '•');
         });
@@ -102,7 +147,7 @@ public class TelaLogin extends JFrame {
         btnEntrar.setFont(new Font("Segoe UI", Font.BOLD, 14));
         btnEntrar.setFocusPainted(false);
         btnEntrar.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btnEntrar.setAlignmentX(Component.LEFT_ALIGNMENT); // Correção de Alinhamento
+        btnEntrar.setAlignmentX(Component.LEFT_ALIGNMENT); 
         
         btnEntrar.addActionListener(e -> tentarLogin());
         pnlDireita.add(btnEntrar);
@@ -112,12 +157,15 @@ public class TelaLogin extends JFrame {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) tentarLogin();
             }
         };
-        txtUsuario.addKeyListener(enterListener);
+        cmbUsuario.getEditor().getEditorComponent().addKeyListener(enterListener);
         txtSenha.addKeyListener(enterListener);
 
-        add(pnlEsquerda);
-        add(pnlDireita);
+        pnlDireitaBase.add(pnlDireita, BorderLayout.CENTER);
 
+        add(pnlEsquerda);
+        add(pnlDireitaBase);
+
+        // Movimentação da janela clicando e arrastando o lado azul
         MouseAdapter dragListener = new MouseAdapter() {
             public void mousePressed(MouseEvent e) { pontoInicialClick = e.getPoint(); }
             public void mouseDragged(MouseEvent e) {
@@ -129,6 +177,37 @@ public class TelaLogin extends JFrame {
         pnlEsquerda.addMouseMotionListener(dragListener);
     }
 
+    // --- FUNÇÃO PARA CRIAR BOTÕES DE JANELA NO ESTILO WINDOWS ---
+    private JButton criarBotaoJanela(String texto, boolean isBotaoFechar) {
+        JButton btn = new JButton(texto);
+        btn.setFont(new Font("Segoe UI", Font.PLAIN, 16));
+        btn.setFocusPainted(false);
+        btn.setBorderPainted(false);
+        btn.setContentAreaFilled(false);
+        btn.setOpaque(true);
+        btn.setBackground(Color.WHITE);
+        btn.setForeground(Color.GRAY);
+        btn.setPreferredSize(new Dimension(45, 30));
+        
+        btn.addMouseListener(new MouseAdapter() {
+            public void mouseEntered(MouseEvent e) {
+                if (isBotaoFechar) {
+                    btn.setBackground(new Color(232, 17, 35)); // Vermelho 
+                    btn.setForeground(Color.WHITE);
+                } else {
+                    btn.setBackground(new Color(229, 229, 229)); // Cinza claro hover
+                    btn.setForeground(Color.BLACK);
+                }
+            }
+            public void mouseExited(MouseEvent e) {
+                btn.setBackground(Color.WHITE);
+                btn.setForeground(Color.GRAY);
+            }
+        });
+        
+        return btn;
+    }
+
     private JLabel criarLabel(String texto) {
         JLabel lbl = new JLabel(texto);
         lbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
@@ -137,24 +216,49 @@ public class TelaLogin extends JFrame {
         return lbl;
     }
 
+    private void carregarUsuariosNoCombo() {
+        try (Connection conn = ConexaoDB.conectar();
+             PreparedStatement stmt = conn.prepareStatement("SELECT login, perfil FROM usuarios ORDER BY login");
+             ResultSet rs = stmt.executeQuery()) {
+            
+            cmbUsuario.addItem(""); 
+            
+            while (rs.next()) {
+                String login = rs.getString("login");
+                String perfil = rs.getString("perfil");
+                cmbUsuario.addItem(new UsuarioComboItem(login, perfil));
+            }
+        } catch (Exception e) {
+            System.out.println("Erro ao carregar lista de usuários: " + e.getMessage());
+        }
+    }
+
     private void tentarLogin() {
-        String user = txtUsuario.getText().trim();
+        Object itemSelecionado = cmbUsuario.getSelectedItem();
         String pass = new String(txtSenha.getPassword());
 
-        if (user.isEmpty() || pass.isEmpty()) {
+        if (itemSelecionado == null || itemSelecionado.toString().trim().isEmpty() || pass.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Preencha usuário e senha!", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
+        }
+
+        String userFinal = "";
+        
+        if (itemSelecionado instanceof UsuarioComboItem) {
+            userFinal = ((UsuarioComboItem) itemSelecionado).login;
+        } else {
+            userFinal = itemSelecionado.toString().trim();
         }
 
         try (Connection conn = ConexaoDB.conectar();
              PreparedStatement stmt = conn.prepareStatement("SELECT perfil FROM usuarios WHERE login = ? AND senha = ?")) {
             
-            stmt.setString(1, user);
+            stmt.setString(1, userFinal);
             stmt.setString(2, pass);
             ResultSet rs = stmt.executeQuery();
 
             if (rs.next()) {
-                SessaoUsuario.loginLogado = user;
+                SessaoUsuario.loginLogado = userFinal;
                 SessaoUsuario.perfilLogado = rs.getString("perfil");
                 this.dispose(); 
                 SwingUtilities.invokeLater(() -> new Main().setVisible(true));

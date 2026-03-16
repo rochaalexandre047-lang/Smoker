@@ -9,32 +9,30 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.sql.*;
 
 class CampoDefinicao {
     String nome;
     String tipo; 
-    String campoA;
-    String operador;
-    String campoB;
+    String formula;
 
     public CampoDefinicao(String nome, String tipo) {
         this.nome = nome;
         this.tipo = tipo;
     }
     
-    public CampoDefinicao(String nome, String tipo, String campoA, String operador, String campoB) {
+    public CampoDefinicao(String nome, String tipo, String formula) {
         this.nome = nome;
         this.tipo = tipo;
-        this.campoA = campoA;
-        this.operador = operador;
-        this.campoB = campoB;
+        this.formula = formula;
     }
 
     @Override
     public String toString() {
         if(tipo.equals("CALCULO")) {
-            return nome + "  [= " + campoA + " " + operador + " " + campoB + "]";
+            return nome + "  [= " + formula + "]";
         }
         String tipoVisual = tipo;
         if(tipo.equals("DATA_PRAZO")) tipoVisual = "DATA (Vencimento)";
@@ -50,15 +48,12 @@ public class TelaCriadorTemplate extends JPanel {
     private JTextField txtNomeCampo;
     private JComboBox<String> cmbTipoCampo; 
     private JPanel pnlFormula;
-    private JTextField txtOrigemA;
-    private JComboBox<String> cmbOperador;
-    private JTextField txtOrigemB;
+    private JTextField txtFormulaLivre; 
     private DefaultListModel<CampoDefinicao> modeloListaCampos;
     private JList<CampoDefinicao> listaCamposVisual;
     private JTable tabelaTemplates;
     private DefaultTableModel modeloTabelaTemplates;
 
-    // Variáveis para controle de Edição
     private int idTemplateEmEdicao = -1;
     private JButton btnSalvar;
     private JButton btnCancelarEdicao;
@@ -78,7 +73,7 @@ public class TelaCriadorTemplate extends JPanel {
 
         JPanel pnlTopo = new JPanel(new GridLayout(0, 1));
         txtNomeModulo = new JTextField();
-        pnlTopo.add(new JLabel("Nome do Módulo (Ex: Boleto, Cliente):"));
+        pnlTopo.add(new JLabel("Nome do Módulo (Ex: Venda, Ordem de Serviço):"));
         pnlTopo.add(txtNomeModulo);
         painel.add(pnlTopo, BorderLayout.NORTH);
 
@@ -97,25 +92,43 @@ public class TelaCriadorTemplate extends JPanel {
             "DATA (Vencimento/Prazo)", 
             "MOEDA (R$)", 
             "NUMERO (Inteiro)", 
-            "CALCULO (Fórmula)"
+            "CALCULO (Fórmula Livre)"
         };
         cmbTipoCampo = new JComboBox<>(tipos);
-        JButton btnAdd = new JButton("Adicionar");
+        JButton btnAdd = new JButton("Adicionar Campo");
 
-        pnlFormula = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        pnlFormula.setBorder(BorderFactory.createTitledBorder("Definir Fórmula"));
+        // --- PAINEL DE FÓRMULA COM TECLADO "ANTI-BURRO" ---
+        pnlFormula = new JPanel(new BorderLayout());
+        pnlFormula.setBorder(BorderFactory.createTitledBorder("Fórmula Matemática"));
         pnlFormula.setVisible(false);
         
-        txtOrigemA = new JTextField(8);
-        String[] ops = {"-", "+", "*", "/"};
-        cmbOperador = new JComboBox<>(ops);
-        txtOrigemB = new JTextField(8);
+        // Teclado de Operadores
+        JPanel pnlTeclado = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+        pnlTeclado.add(new JLabel("Operadores: "));
+        String[] operadores = {" + ", " - ", " * ", " / ", " ( ", " ) "};
+        for(String op : operadores) {
+            JButton btnOp = new JButton(op.trim());
+            btnOp.setMargin(new Insets(2, 6, 2, 6));
+            btnOp.setBackground(new Color(230, 230, 240));
+            btnOp.setFocusPainted(false);
+            btnOp.addActionListener(e -> {
+                txtFormulaLivre.setText(txtFormulaLivre.getText() + op);
+                txtFormulaLivre.requestFocus();
+            });
+            pnlTeclado.add(btnOp);
+        }
+        
+        txtFormulaLivre = new JTextField();
+        txtFormulaLivre.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        
+        JPanel pnlInstrucao = new JPanel(new GridLayout(2, 1));
+        JLabel lblInstrucao1 = new JLabel("Clique nos campos da lista abaixo para inseri-los na fórmula:");
+        lblInstrucao1.setForeground(new Color(0, 100, 200));
+        pnlInstrucao.add(pnlTeclado);
+        pnlInstrucao.add(lblInstrucao1);
 
-        pnlFormula.add(new JLabel("Campo A:"));
-        pnlFormula.add(txtOrigemA);
-        pnlFormula.add(cmbOperador);
-        pnlFormula.add(new JLabel("Campo B:"));
-        pnlFormula.add(txtOrigemB);
+        pnlFormula.add(pnlInstrucao, BorderLayout.NORTH);
+        pnlFormula.add(txtFormulaLivre, BorderLayout.CENTER);
 
         cmbTipoCampo.addActionListener(e -> {
             String selecionado = (String) cmbTipoCampo.getSelectedItem();
@@ -133,6 +146,33 @@ public class TelaCriadorTemplate extends JPanel {
 
         modeloListaCampos = new DefaultListModel<>();
         listaCamposVisual = new JList<>(modeloListaCampos);
+        listaCamposVisual.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+        // --- MÁGICA DO CLIQUE NA LISTA PARA INJETAR O NOME ---
+        listaCamposVisual.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // Só injeta se o painel de fórmula estiver visível e ativo
+                if (pnlFormula.isVisible()) {
+                    int index = listaCamposVisual.locationToIndex(e.getPoint());
+                    if (index >= 0) {
+                        CampoDefinicao campoClicado = modeloListaCampos.getElementAt(index);
+                        
+                        // Impede de adicionar um campo de cálculo dentro de outro cálculo para não dar loop infinito
+                        if (!campoClicado.tipo.equals("CALCULO")) {
+                            String textoAtual = txtFormulaLivre.getText();
+                            if (!textoAtual.isEmpty() && !textoAtual.endsWith(" ")) {
+                                textoAtual += " "; // Dá um espaço automático para ficar bonito
+                            }
+                            txtFormulaLivre.setText(textoAtual + campoClicado.nome + " ");
+                            txtFormulaLivre.requestFocus();
+                        } else {
+                            JOptionPane.showMessageDialog(painel, "Você não pode usar um campo de cálculo dentro de outro cálculo.", "Aviso", JOptionPane.WARNING_MESSAGE);
+                        }
+                    }
+                }
+            }
+        });
 
         pnlCentro.add(containerCampos, BorderLayout.NORTH);
         pnlCentro.add(new JScrollPane(listaCamposVisual), BorderLayout.CENTER);
@@ -142,7 +182,6 @@ public class TelaCriadorTemplate extends JPanel {
         
         painel.add(pnlCentro, BorderLayout.CENTER);
 
-        // Painel de Botões Inferiores (Salvar e Cancelar)
         JPanel pnlAcoes = new JPanel(new GridLayout(2, 1, 5, 5));
         
         btnSalvar = new JButton("Salvar Novo Modelo");
@@ -156,13 +195,12 @@ public class TelaCriadorTemplate extends JPanel {
         btnCancelarEdicao.setBackground(new Color(255, 200, 200));
         btnCancelarEdicao.setContentAreaFilled(false);
         btnCancelarEdicao.setOpaque(true);
-        btnCancelarEdicao.setVisible(false); // Só aparece quando estiver editando
+        btnCancelarEdicao.setVisible(false); 
 
         pnlAcoes.add(btnSalvar);
         pnlAcoes.add(btnCancelarEdicao);
         painel.add(pnlAcoes, BorderLayout.SOUTH);
 
-        // AÇÕES DOS BOTÕES DE CRIAÇÃO
         Runnable acaoAdicionar = () -> {
             String nome = txtNomeCampo.getText().trim();
             if(!nome.isEmpty()){
@@ -175,17 +213,16 @@ public class TelaCriadorTemplate extends JPanel {
                 else if(tipoBruto.contains("CALCULO")) tipoSalvar = "CALCULO";
                 
                 if (tipoSalvar.equals("CALCULO")) {
-                    String cA = txtOrigemA.getText().trim();
-                    String op = (String) cmbOperador.getSelectedItem();
-                    String cB = txtOrigemB.getText().trim();
-                    if(cA.isEmpty() || cB.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Preencha A e B!"); return;
+                    String form = txtFormulaLivre.getText().trim();
+                    if(form.isEmpty()) {
+                        JOptionPane.showMessageDialog(this, "A fórmula está vazia! Clique nos campos abaixo para montar a conta."); return;
                     }
-                    modeloListaCampos.addElement(new CampoDefinicao(nome, tipoSalvar, cA, op, cB));
+                    modeloListaCampos.addElement(new CampoDefinicao(nome, tipoSalvar, form));
                 } else {
                     modeloListaCampos.addElement(new CampoDefinicao(nome, tipoSalvar));
                 }
                 txtNomeCampo.setText("");
+                txtFormulaLivre.setText(""); // Limpa a formula pro próximo
                 txtNomeCampo.requestFocus();
             }
         };
@@ -223,11 +260,7 @@ public class TelaCriadorTemplate extends JPanel {
 
         painel.add(new JScrollPane(tabelaTemplates), BorderLayout.CENTER);
         
-        // Botões do Painel Direito
         JPanel pnlBotoes = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        
-        JButton btnUsar = criarBotao("Disponibilizar", new Color(240, 240, 240));
-        btnUsar.addActionListener(e -> JOptionPane.showMessageDialog(this, "Modelo disponível no Cadastro!"));
         
         JButton btnEditar = criarBotao("Editar", new Color(255, 220, 100));
         btnEditar.addActionListener(e -> carregarTemplateParaEdicao());
@@ -235,7 +268,6 @@ public class TelaCriadorTemplate extends JPanel {
         JButton btnExcluir = criarBotao("Excluir", new Color(255, 200, 200));
         btnExcluir.addActionListener(e -> excluirTemplate());
         
-        pnlBotoes.add(btnUsar); 
         pnlBotoes.add(btnEditar); 
         pnlBotoes.add(btnExcluir);
         
@@ -252,7 +284,6 @@ public class TelaCriadorTemplate extends JPanel {
         return btn;
     }
 
-    // --- LÓGICA DE CARREGAR PARA EDIÇÃO ---
     private void carregarTemplateParaEdicao() {
         int linha = tabelaTemplates.getSelectedRow();
         if (linha == -1) {
@@ -269,11 +300,9 @@ public class TelaCriadorTemplate extends JPanel {
             ResultSet rs = stmt.executeQuery();
             
             if (rs.next()) {
-                // Preenche o nome
                 txtNomeModulo.setText(rs.getString("nome_modulo"));
                 String json = rs.getString("estrutura_json");
 
-                // Limpa a lista atual e preenche com os campos do banco
                 modeloListaCampos.clear();
                 JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
                 JsonArray campos = obj.getAsJsonArray("campos");
@@ -284,19 +313,16 @@ public class TelaCriadorTemplate extends JPanel {
                     String cTipo = campo.get("tipo").getAsString();
                     
                     if (cTipo.equals("CALCULO")) {
-                        String cA = campo.has("campoA") ? campo.get("campoA").getAsString() : "";
-                        String op = campo.has("operador") ? campo.get("operador").getAsString() : "";
-                        String cB = campo.has("campoB") ? campo.get("campoB").getAsString() : "";
-                        modeloListaCampos.addElement(new CampoDefinicao(cNome, cTipo, cA, op, cB));
+                        String form = campo.has("formula") ? campo.get("formula").getAsString() : "";
+                        modeloListaCampos.addElement(new CampoDefinicao(cNome, cTipo, form));
                     } else {
                         modeloListaCampos.addElement(new CampoDefinicao(cNome, cTipo));
                     }
                 }
 
-                // Muda o estado da tela para "Modo Edição"
                 idTemplateEmEdicao = id;
                 btnSalvar.setText("Salvar Alterações do Modelo");
-                btnSalvar.setBackground(new Color(255, 220, 100)); // Fica amarelo para indicar edição
+                btnSalvar.setBackground(new Color(255, 220, 100)); 
                 btnCancelarEdicao.setVisible(true);
             }
         } catch (Exception e) {
@@ -309,23 +335,15 @@ public class TelaCriadorTemplate extends JPanel {
         txtNomeModulo.setText("");
         modeloListaCampos.clear();
         btnSalvar.setText("Salvar Novo Modelo");
-        btnSalvar.setBackground(new Color(200, 255, 200)); // Volta a ficar verde
+        btnSalvar.setBackground(new Color(200, 255, 200)); 
         btnCancelarEdicao.setVisible(false);
     }
 
-    // --- LÓGICA DE SALVAR (INSERT OU UPDATE) ---
     private void salvarNoBanco() {
         String nome = txtNomeModulo.getText().trim();
         if (nome.isEmpty() || modeloListaCampos.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Preencha o nome do módulo e adicione pelo menos um campo!"); 
             return;
-        }
-
-        if (idTemplateEmEdicao != -1) {
-            int confirm = JOptionPane.showConfirmDialog(this, 
-                "Atenção: Ao alterar este modelo, você pode afetar como os registros antigos são exibidos.\nDeseja continuar?", 
-                "Confirmação de Edição", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-            if (confirm != JOptionPane.YES_OPTION) return;
         }
 
         try {
@@ -337,9 +355,7 @@ public class TelaCriadorTemplate extends JPanel {
                 objCampo.addProperty("nome", campo.nome);
                 objCampo.addProperty("tipo", campo.tipo);
                 if (campo.tipo.equals("CALCULO")) {
-                    objCampo.addProperty("campoA", campo.campoA);
-                    objCampo.addProperty("operador", campo.operador);
-                    objCampo.addProperty("campoB", campo.campoB);
+                    objCampo.addProperty("formula", campo.formula);
                 }
                 arr.add(objCampo);
             }
@@ -347,10 +363,8 @@ public class TelaCriadorTemplate extends JPanel {
 
             String sql;
             if (idTemplateEmEdicao == -1) {
-                // Modo Novo
                 sql = "INSERT INTO templates (nome_modulo, estrutura_json) VALUES (?, ?)";
             } else {
-                // Modo Atualização
                 sql = "UPDATE templates SET nome_modulo = ?, estrutura_json = ? WHERE id = ?";
             }
 
@@ -360,14 +374,12 @@ public class TelaCriadorTemplate extends JPanel {
                 stmt.setString(1, nome);
                 stmt.setString(2, json.toString());
                 
-                if (idTemplateEmEdicao != -1) {
-                    stmt.setInt(3, idTemplateEmEdicao);
-                }
+                if (idTemplateEmEdicao != -1) stmt.setInt(3, idTemplateEmEdicao);
                 
                 stmt.executeUpdate();
                 
-                JOptionPane.showMessageDialog(this, idTemplateEmEdicao == -1 ? "Novo modelo criado com sucesso!" : "Modelo atualizado com sucesso!");
-                cancelarModoEdicao(); // Limpa tudo e volta ao normal
+                JOptionPane.showMessageDialog(this, "Modelo salvo com sucesso!");
+                cancelarModoEdicao(); 
                 atualizarListaTemplates();
             }
         } catch(Exception e) { 
@@ -388,14 +400,9 @@ public class TelaCriadorTemplate extends JPanel {
 
     private void excluirTemplate() {
         int linha = tabelaTemplates.getSelectedRow();
-        if(linha == -1) {
-            JOptionPane.showMessageDialog(this, "Selecione um modelo para excluir.");
-            return;
-        }
-        
+        if(linha == -1) return;
         int id = (int) modeloTabelaTemplates.getValueAt(linha, 0);
-        
-        int confirm = JOptionPane.showConfirmDialog(this, "Excluir este modelo? Isso NÃO apagará os registros vinculados a ele, mas eles perderão o layout.", "Confirmar Exclusão", JOptionPane.YES_NO_OPTION);
+        int confirm = JOptionPane.showConfirmDialog(this, "Excluir este modelo?", "Confirmar Exclusão", JOptionPane.YES_NO_OPTION);
         if(confirm == JOptionPane.YES_OPTION) {
             try(Connection conn = ConexaoDB.conectar();
                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM templates WHERE id = ?")) {

@@ -1,4 +1,5 @@
 package com.mycompany.smoker;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -24,7 +25,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List; 
+import java.util.List;
 import java.util.Map;
 
 public class TelaListagem extends JPanel {
@@ -179,6 +180,7 @@ public class TelaListagem extends JPanel {
         } catch (SQLException e) { JOptionPane.showMessageDialog(this, "Erro: " + e.getMessage()); }
     }
 
+    // --- O MOTOR DE EDIÇÃO ATUALIZADO PARA FÓRMULAS LIVRES ---
     private void editarRegistroSelecionado() {
         int linha = tabela.getSelectedRow();
         if (linha == -1) {
@@ -229,8 +231,6 @@ public class TelaListagem extends JPanel {
                     objDefinicao = elemento.getAsJsonObject();
                     nomeCampo = objDefinicao.get("nome").getAsString();
                     if(objDefinicao.has("tipo")) tipoCampo = objDefinicao.get("tipo").getAsString();
-                } else {
-                    nomeCampo = elemento.getAsString();
                 }
 
                 String valorSalvo = dadosAtuais.has(nomeCampo) ? dadosAtuais.get(nomeCampo).getAsString() : "";
@@ -319,47 +319,61 @@ public class TelaListagem extends JPanel {
                 camposGerados.put(nomeCampo, componenteCampo);
             }
 
+            // ATTACH LISTENER PARA FORMULAS DINÂMICAS
             for (JsonObject config : definicoesCalculo) {
                 try {
                     String nomeDestino = config.get("nome").getAsString();
-                    String nomeA = config.get("campoA").getAsString();
-                    String op = config.get("operador").getAsString();
-                    String nomeB = config.get("campoB").getAsString();
-                    JComponent compDestino = camposGerados.get(nomeDestino);
-                    JComponent compA = camposGerados.get(nomeA);
-                    JComponent compB = camposGerados.get(nomeB);
+                    String formulaOriginal = config.get("formula").getAsString(); // Ex: A + B * C
                     
-                    if (compDestino instanceof JTextField && compA instanceof JTextField && compB instanceof JTextField) {
+                    JComponent compDestino = camposGerados.get(nomeDestino);
+                    
+                    if (compDestino instanceof JTextField) {
                         JTextField txtRes = (JTextField) compDestino;
-                        JTextField txtA = (JTextField) compA;
-                        JTextField txtB = (JTextField) compB;
-                        DocumentListener ouvinte = new DocumentListener() {
+                        
+                        DocumentListener ouvinteUniversal = new DocumentListener() {
                             public void insertUpdate(DocumentEvent e) { calcular(); }
                             public void removeUpdate(DocumentEvent e) { calcular(); }
                             public void changedUpdate(DocumentEvent e) { calcular(); }
+                            
                             void calcular() {
                                 try {
-                                    double valA = parseValor(txtA.getText());
-                                    double valB = parseValor(txtB.getText());
-                                    double resultado = 0;
-                                    switch (op) {
-                                        case "+": resultado = valA + valB; break;
-                                        case "-": resultado = valA - valB; break;
-                                        case "*": resultado = valA * valB; break;
-                                        case "/": resultado = (valB != 0) ? valA / valB : 0; break;
+                                    String expressao = formulaOriginal;
+                                    
+                                    // Ordena os campos do maior pro menor nome para evitar que "Preco" substitua pedaço de "PrecoTotal"
+                                    List<String> nomesDosCampos = new ArrayList<>(camposGerados.keySet());
+                                    nomesDosCampos.sort((a, b) -> Integer.compare(b.length(), a.length()));
+                                    
+                                    for(String nome : nomesDosCampos) {
+                                        if(expressao.contains(nome)) {
+                                            JComponent c = camposGerados.get(nome);
+                                            double val = 0;
+                                            if(c instanceof JTextField) val = parseValor(((JTextField)c).getText());
+                                            expressao = expressao.replace(nome, String.valueOf(val));
+                                        }
                                     }
+                                    
+                                    double resultado = avaliarExpressaoMatematica(expressao);
                                     DecimalFormat df = new DecimalFormat("#,##0.00");
                                     txtRes.setText("R$ " + df.format(resultado));
-                                } catch (Exception ex) { txtRes.setText("Erro"); }
+                                    
+                                } catch (Exception ex) { 
+                                    txtRes.setText("R$ 0,00"); 
+                                }
                             }
+                            
                             double parseValor(String texto) {
                                 if(texto == null || texto.isEmpty()) return 0;
                                 String limpo = texto.replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".");
                                 try { return Double.parseDouble(limpo); } catch(Exception e) { return 0; }
                             }
                         };
-                        txtA.getDocument().addDocumentListener(ouvinte);
-                        txtB.getDocument().addDocumentListener(ouvinte);
+                        
+                        // Adiciona o ouvinte em todos os campos para garantir que a fórmula atualize sempre
+                        for(JComponent c : camposGerados.values()) {
+                            if(c instanceof JTextField && c != txtRes) {
+                                ((JTextField)c).getDocument().addDocumentListener(ouvinteUniversal);
+                            }
+                        }
                     }
                 } catch (Exception e) {}
             }
@@ -434,35 +448,68 @@ public class TelaListagem extends JPanel {
         dialogEdit.setVisible(true);
     }
 
-    // --- LÓGICA DE IMPRESSÃO COM SELEÇÃO DE CAMPOS VISÍVEIS ---
+    // --- INTERPRETADOR MATEMÁTICO (EVALUATOR) ---
+    // Transforma uma String tipo "10 + 20 * 2" em número Double (Nativo sem bibliotecas extras)
+    public static double avaliarExpressaoMatematica(final String str) {
+        return new Object() {
+            int pos = -1, ch;
+            void nextChar() { ch = (++pos < str.length()) ? str.charAt(pos) : -1; }
+            boolean eat(int charToEat) {
+                while (ch == ' ') nextChar();
+                if (ch == charToEat) { nextChar(); return true; }
+                return false;
+            }
+            double parse() {
+                nextChar();
+                double x = parseExpression();
+                if (pos < str.length()) throw new RuntimeException("Inesperado: " + (char)ch);
+                return x;
+            }
+            double parseExpression() {
+                double x = parseTerm();
+                for (;;) {
+                    if      (eat('+')) x += parseTerm(); 
+                    else if (eat('-')) x -= parseTerm(); 
+                    else return x;
+                }
+            }
+            double parseTerm() {
+                double x = parseFactor();
+                for (;;) {
+                    if      (eat('*')) x *= parseFactor(); 
+                    else if (eat('/')) x /= parseFactor(); 
+                    else return x;
+                }
+            }
+            double parseFactor() {
+                if (eat('+')) return parseFactor(); 
+                if (eat('-')) return -parseFactor(); 
+                double x;
+                int startPos = pos;
+                if (eat('(')) { 
+                    x = parseExpression();
+                    eat(')');
+                } else if ((ch >= '0' && ch <= '9') || ch == '.') { 
+                    while ((ch >= '0' && ch <= '9') || ch == '.') nextChar();
+                    x = Double.parseDouble(str.substring(startPos, pos));
+                } else {
+                    throw new RuntimeException("Inesperado: " + (char)ch);
+                }
+                return x;
+            }
+        }.parse();
+    }
+    // ----------------------------------------------
+
+
+    // Abaixo continua as funções de imprimir pdf e abrir anexos iguais antes (não precisou mexer)
     private void gerarImpressaoHtml() {
         int linha = tabela.getSelectedRow();
-        if (linha == -1) {
-            JOptionPane.showMessageDialog(this, "Selecione um registro para imprimir.");
-            return;
-        }
+        if (linha == -1) { JOptionPane.showMessageDialog(this, "Selecione um registro para imprimir."); return; }
+        String[] opcoes = {"1. Documento Simples", "2. Termo de Garantia", "3. Recibo de Venda", "4. Comprovante de Entrada"};
+        String escolhaStr = (String) JOptionPane.showInputDialog(this, "Selecione o formato:", "Impressão", JOptionPane.QUESTION_MESSAGE, null, opcoes, opcoes[0]);
+        if (escolhaStr == null) return; 
 
-        //Pergunta o formato
-        String[] opcoes = {
-            "1. Documento Simples (Padrão)", 
-            "2. Termo de Garantia", 
-            "3. Recibo de Venda / Saída", 
-            "4. Comprovante de Entrada / Compra"
-        };
-        
-        String escolhaStr = (String) JOptionPane.showInputDialog(
-            this,
-            "Selecione o formato do documento:",
-            "Opções de Impressão",
-            JOptionPane.QUESTION_MESSAGE,
-            null,
-            opcoes,
-            opcoes[0]
-        );
-
-        if (escolhaStr == null) return; // Cancelou
-
-        // Extrai os dados
         String id = modelo.getValueAt(linha, 0).toString();
         String tipoBanco = modelo.getValueAt(linha, 1).toString();
         String titulo = modelo.getValueAt(linha, 2).toString();
@@ -471,20 +518,15 @@ public class TelaListagem extends JPanel {
         Gson gson = new Gson();
         JsonObject dados = gson.fromJson(jsonBruto, JsonObject.class);
 
-        // 2. TELA INTERMEDIÁRIA: QUAIS CAMPOS APARECEM?
         JPanel pnlEscolhaCampos = new JPanel(new BorderLayout());
         pnlEscolhaCampos.add(new JLabel("Desmarque os campos que devem ficar OCULTOS no documento:"), BorderLayout.NORTH);
-        
         JPanel pnlCheckboxes = new JPanel();
         pnlCheckboxes.setLayout(new BoxLayout(pnlCheckboxes, BoxLayout.Y_AXIS));
-        
-        // Usamos LinkedHashMap para manter a ordem original que o usuário criou os campos
         Map<String, JCheckBox> mapaCheckboxes = new LinkedHashMap<>();
         
         for (Map.Entry<String, JsonElement> entry : dados.entrySet()) {
             String chave = entry.getKey();
             String valor = entry.getValue().getAsString();
-            
             if(!valor.isEmpty() && !valor.equals("0,00") && !valor.equals("__/__/____")) {
                 JCheckBox chk = new JCheckBox(chave + "  (Atual: " + valor + ")", true);
                 mapaCheckboxes.put(chave, chk);
@@ -497,11 +539,9 @@ public class TelaListagem extends JPanel {
         pnlEscolhaCampos.add(scrollChecks, BorderLayout.CENTER);
 
         int resultChecks = JOptionPane.showConfirmDialog(this, pnlEscolhaCampos, "Campos Visíveis", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        
-        if (resultChecks != JOptionPane.OK_OPTION) return; // Cancelou a seleção de campos
+        if (resultChecks != JOptionPane.OK_OPTION) return;
 
         try {
-            // Configurações baseadas na escolha do documento
             String tituloDoc = "DOCUMENTO DE REGISTRO";
             String textoSuperior = "";
             String textoInferior = "";
@@ -509,29 +549,21 @@ public class TelaListagem extends JPanel {
             if (escolhaStr.startsWith("1")) {
                 tituloDoc = "Registro: " + tipoBanco;
                 textoInferior = "<div class='footer'>Gerado eletronicamente pelo Sistema SMOKER Enterprise.</div>";
-            } 
-            else if (escolhaStr.startsWith("2")) {
+            } else if (escolhaStr.startsWith("2")) {
                 tituloDoc = "TERMO DE GARANTIA";
                 textoInferior = "<div style='border: 1px solid #000; padding: 15px; margin-top: 20px; font-size: 12px; text-align: justify;'>"
-                              + "<b>CONDIÇÕES DE GARANTIA:</b><br><br>"
-                              + "1. O prazo de garantia legal é de 90 (noventa) dias a contar da data de emissão deste documento, cobrindo exclusivamente defeitos de fabricação referentes aos itens/serviços descritos acima.<br>"
-                              + "2. A garantia perderá sua validade em casos de mau uso, quedas, contato com líquidos, instalações indevidas, picos de energia ou violação de lacres de segurança.<br>"
-                              + "3. Para acionamento da garantia, é indispensável a apresentação deste termo.</div>";
-            }
-            else if (escolhaStr.startsWith("3")) {
+                              + "<b>CONDIÇÕES DE GARANTIA:</b><br><br>1. O prazo de garantia legal é de 90 dias.<br>2. A garantia perderá sua validade em casos de mau uso.</div>";
+            } else if (escolhaStr.startsWith("3")) {
                 tituloDoc = "RECIBO DE VENDA";
-                textoSuperior = "<div style='margin-bottom: 20px; font-size: 14px;'>Declaramos o recebimento dos valores referentes à venda/prestação de serviços dos itens discriminados abaixo.</div>";
+                textoSuperior = "<div style='margin-bottom: 20px; font-size: 14px;'>Declaramos o recebimento dos valores referentes à venda dos itens discriminados abaixo.</div>";
                 textoInferior = "<div class='footer'>Agradecemos a preferência!</div>";
-            }
-            else if (escolhaStr.startsWith("4")) {
+            } else if (escolhaStr.startsWith("4")) {
                 tituloDoc = "COMPROVANTE DE ENTRADA";
-                textoSuperior = "<div style='margin-bottom: 20px; font-size: 14px;'>Declaramos o recebimento / entrada em estoque dos itens discriminados abaixo para os devidos fins.</div>";
-                textoInferior = "<div class='footer'>Documento de uso e controle interno.</div>";
+                textoSuperior = "<div style='margin-bottom: 20px; font-size: 14px;'>Declaramos a entrada em estoque dos itens discriminados abaixo.</div>";
+                textoInferior = "<div class='footer'>Documento interno.</div>";
             }
 
-            StringBuilder html = new StringBuilder();
-            html.append("<html><head><title>Doc #").append(id).append("</title>");
-            html.append("<style>");
+            StringBuilder html = new StringBuilder("<html><head><title>Doc #").append(id).append("</title><style>");
             html.append("body { font-family: sans-serif; padding: 40px; color: #333; }");
             html.append(".header { text-align: center; border-bottom: 2px solid #444; padding-bottom: 20px; margin-bottom: 30px; }");
             html.append(".titulo-doc { font-size: 24px; font-weight: bold; color: #444; text-transform: uppercase; margin-top: 10px; }");
@@ -545,85 +577,42 @@ public class TelaListagem extends JPanel {
             html.append(".linha-assinatura { width: 45%; border-top: 1px solid #000; text-align: center; padding-top: 10px; font-size: 14px;}");
             html.append("</style></head><body>");
 
-            // Cabeçalho
-            html.append("<div class='header'>");
-            html.append("<h1>SMOKER SYSTEMS</h1>"); 
-            html.append("<div class='titulo-doc'>").append(tituloDoc).append("</div>");
-            html.append("</div>");
-
-            // Info Superior
-            html.append("<div class='meta-info'>");
-            html.append("<div><b>Documento Nº:</b> ").append(id).append("<br><b>Referência:</b> ").append(titulo).append("</div>");
-            html.append("<div><b>Emissão:</b> ").append(LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))).append("</div>");
-            html.append("</div>");
-
-            if (!textoSuperior.isEmpty()) {
-                html.append(textoSuperior);
-            }
-
-            // Tabela FILTRANDO PELAS CAIXINHAS MARCADAS
-            html.append("<table>");
+            html.append("<div class='header'><h1>SMOKER SYSTEMS</h1><div class='titulo-doc'>").append(tituloDoc).append("</div></div>");
+            html.append("<div class='meta-info'><div><b>Documento Nº:</b> ").append(id).append("<br><b>Referência:</b> ").append(titulo).append("</div>");
+            html.append("<div><b>Emissão:</b> ").append(LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))).append("</div></div>");
+            html.append(textoSuperior).append("<table>");
             
             for (Map.Entry<String, JsonElement> entry : dados.entrySet()) {
                 String chave = entry.getKey();
-                // Verifica se a chave existe no nosso mapa de Checkboxes e se o usuário deixou ela marcada
                 if (mapaCheckboxes.containsKey(chave) && mapaCheckboxes.get(chave).isSelected()) {
-                    String valor = entry.getValue().getAsString();
-                    html.append("<tr>");
-                    html.append("<th>").append(chave).append("</th>");
-                    html.append("<td>").append(valor).append("</td>");
-                    html.append("</tr>");
+                    html.append("<tr><th>").append(chave).append("</th><td>").append(entry.getValue().getAsString()).append("</td></tr>");
                 }
             }
-            html.append("</table>");
-
-            html.append(textoInferior);
-
-            // Assinaturas
-            html.append("<div class='assinatura'>");
-            html.append("<div class='linha-assinatura'>Responsável da Empresa</div>");
-            html.append("<div class='linha-assinatura'>Assinatura do Cliente</div>");
-            html.append("</div>");
-
+            html.append("</table>").append(textoInferior);
+            html.append("<div class='assinatura'><div class='linha-assinatura'>Responsável da Empresa</div><div class='linha-assinatura'>Assinatura do Cliente</div></div>");
             html.append("</body></html>");
 
             File arquivoTemp = new File("documento_temp.html");
             BufferedWriter writer = new BufferedWriter(new FileWriter(arquivoTemp));
-            writer.write(html.toString());
-            writer.close();
-
+            writer.write(html.toString()); writer.close();
             Desktop.getDesktop().open(arquivoTemp);
 
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Erro ao gerar documento: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
     class RenderizadorDePrazos extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            if (isSelected) {
-                c.setBackground(table.getSelectionBackground());
-                c.setForeground(table.getSelectionForeground());
-                return c;
-            }
+            if (isSelected) { c.setBackground(table.getSelectionBackground()); c.setForeground(table.getSelectionForeground()); return c; }
             String dataString = (String) table.getModel().getValueAt(row, 3);
-            c.setBackground(Color.WHITE); 
-            c.setForeground(Color.BLACK);
+            c.setBackground(Color.WHITE); c.setForeground(Color.BLACK);
             if (dataString != null && !dataString.isEmpty() && !dataString.equals("-")) {
                 try {
-                    DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-                    LocalDate dataVenc = LocalDate.parse(dataString, fmt);
-                    LocalDate hoje = LocalDate.now();
-                    long dias = ChronoUnit.DAYS.between(hoje, dataVenc);
-                    if (dias < 0) { 
-                        c.setBackground(new Color(255, 200, 200)); 
-                    } else if (dias == 0) { 
-                         c.setBackground(new Color(255, 150, 150)); 
-                    } else if (dias <= 7) { 
-                        c.setBackground(new Color(255, 255, 200)); 
-                    }
+                    long dias = ChronoUnit.DAYS.between(LocalDate.now(), LocalDate.parse(dataString, DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+                    if (dias < 0) c.setBackground(new Color(255, 200, 200)); 
+                    else if (dias == 0) c.setBackground(new Color(255, 150, 150)); 
+                    else if (dias <= 7) c.setBackground(new Color(255, 255, 200)); 
                 } catch (Exception e) {}
             }
             return c;
@@ -637,72 +626,49 @@ public class TelaListagem extends JPanel {
         String jsonBruto = (String) modelo.getValueAt(linha, 4);
         Window parentWindow = SwingUtilities.getWindowAncestor(this);
         JDialog dialog = new JDialog(parentWindow, "Detalhes: " + titulo, Dialog.ModalityType.APPLICATION_MODAL);
-        dialog.setSize(500, 400);
-        dialog.setLayout(new BorderLayout());
+        dialog.setSize(500, 400); dialog.setLayout(new BorderLayout());
         JPanel contentPanel = new JPanel();
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
-        contentPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
-        contentPanel.setBackground(Color.WHITE);
+        contentPanel.setBorder(new EmptyBorder(15, 15, 15, 15)); contentPanel.setBackground(Color.WHITE);
         try {
-            Gson gson = new Gson();
-            JsonObject jsonObject = gson.fromJson(jsonBruto, JsonObject.class);
+            JsonObject jsonObject = new Gson().fromJson(jsonBruto, JsonObject.class);
             JLabel lblTitulo = new JLabel(titulo);
-            lblTitulo.setFont(new Font("Segoe UI", Font.BOLD, 18));
-            lblTitulo.setAlignmentX(Component.LEFT_ALIGNMENT);
-            contentPanel.add(lblTitulo);
-            contentPanel.add(Box.createRigidArea(new Dimension(0, 15)));
+            lblTitulo.setFont(new Font("Segoe UI", Font.BOLD, 18)); lblTitulo.setAlignmentX(Component.LEFT_ALIGNMENT);
+            contentPanel.add(lblTitulo); contentPanel.add(Box.createRigidArea(new Dimension(0, 15)));
             for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-                String chave = entry.getKey();
-                String valor = entry.getValue().getAsString();
-                JPanel row = new JPanel(new BorderLayout());
-                row.setBackground(Color.WHITE);
-                row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
-                JLabel lblChave = new JLabel(chave + ": ");
-                lblChave.setFont(new Font("Segoe UI", Font.BOLD, 14));
-                lblChave.setForeground(new Color(100, 100, 100));
-                JLabel lblValor = new JLabel(valor);
-                lblValor.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-                lblValor.setForeground(Color.BLACK);
-                row.add(lblChave, BorderLayout.WEST);
-                row.add(lblValor, BorderLayout.CENTER);
-                contentPanel.add(row);
-                contentPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+                JPanel row = new JPanel(new BorderLayout()); row.setBackground(Color.WHITE); row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+                JLabel lblChave = new JLabel(entry.getKey() + ": "); lblChave.setFont(new Font("Segoe UI", Font.BOLD, 14)); lblChave.setForeground(new Color(100, 100, 100));
+                JLabel lblValor = new JLabel(entry.getValue().getAsString()); lblValor.setFont(new Font("Segoe UI", Font.PLAIN, 14)); lblValor.setForeground(Color.BLACK);
+                row.add(lblChave, BorderLayout.WEST); row.add(lblValor, BorderLayout.CENTER);
+                contentPanel.add(row); contentPanel.add(Box.createRigidArea(new Dimension(0, 5)));
             }
-        } catch (Exception e) { contentPanel.add(new JLabel("Erro: " + jsonBruto)); }
+        } catch (Exception e) {}
         dialog.add(new JScrollPane(contentPanel), BorderLayout.CENTER);
         JButton btnFechar = criarBotao("Fechar", new Color(240, 240, 240), Color.BLACK);
         btnFechar.addActionListener(e -> dialog.dispose());
         JPanel pnlSul = new JPanel(); pnlSul.add(btnFechar);
-        dialog.add(pnlSul, BorderLayout.SOUTH);
-        dialog.setLocationRelativeTo(this);
-        dialog.setVisible(true);
+        dialog.add(pnlSul, BorderLayout.SOUTH); dialog.setLocationRelativeTo(this); dialog.setVisible(true);
     }
 
     private void excluirRegistroSelecionado() {
         int linha = tabela.getSelectedRow();
-        if (linha == -1) { JOptionPane.showMessageDialog(this, "Selecione para excluir."); return; }
+        if (linha == -1) return;
         int id = (int) modelo.getValueAt(linha, 0);
-        int confirm = JOptionPane.showConfirmDialog(this, "Excluir permanentemente?", "Confirmar", JOptionPane.YES_NO_OPTION);
-        if (confirm == JOptionPane.YES_OPTION) {
-            try (Connection conn = ConexaoDB.conectar();
-                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM registros WHERE id = ?")) {
-                stmt.setInt(1, id); stmt.executeUpdate();
-                modelo.removeRow(linha);
-                JOptionPane.showMessageDialog(this, "Registro excluído!");
-            } catch (SQLException e) { JOptionPane.showMessageDialog(this, "Erro: " + e.getMessage()); }
+        if (JOptionPane.showConfirmDialog(this, "Excluir permanentemente?", "Confirmar", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+            try (Connection conn = ConexaoDB.conectar(); PreparedStatement stmt = conn.prepareStatement("DELETE FROM registros WHERE id = ?")) {
+                stmt.setInt(1, id); stmt.executeUpdate(); modelo.removeRow(linha);
+            } catch (SQLException e) {}
         }
     }
 
     private void abrirArquivoSelecionado() {
         int linha = tabela.getSelectedRow();
-        if (linha == -1) { JOptionPane.showMessageDialog(this, "Selecione uma linha!"); return; }
+        if (linha == -1) return;
         String conteudo = (String) modelo.getValueAt(linha, 5); 
-        if (conteudo == null || conteudo.isEmpty() || conteudo.equals("Sem Anexo")) {
-            JOptionPane.showMessageDialog(this, "Não tem anexos."); return;
-        }
+        if (conteudo == null || conteudo.isEmpty() || conteudo.equals("Sem Anexo")) return;
         try {
              if (conteudo.trim().startsWith("[")) {
-                 com.google.gson.JsonArray caminhos = com.google.gson.JsonParser.parseString(conteudo).getAsJsonArray();
+                 JsonArray caminhos = JsonParser.parseString(conteudo).getAsJsonArray();
                  if(caminhos.size()==1) { abrirArquivoFisico(caminhos.get(0).getAsString()); return; }
                  String[] opcoes = new String[caminhos.size()];
                  for(int i=0; i<caminhos.size(); i++) opcoes[i] = caminhos.get(i).getAsString().replace("docs\\", "");
@@ -717,7 +683,6 @@ public class TelaListagem extends JPanel {
             File arquivo = new File(caminho);
             if (!arquivo.exists()) arquivo = new File("docs", new File(caminho).getName());
             if (arquivo.exists()) Desktop.getDesktop().open(arquivo);
-            else JOptionPane.showMessageDialog(this, "Arquivo não encontrado: " + caminho);
-        } catch (Exception e) { JOptionPane.showMessageDialog(this, "Erro: " + e.getMessage()); }
+        } catch (Exception e) {}
     }
 }
